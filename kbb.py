@@ -21,7 +21,7 @@ class Kbb:
 
     def submitRequest(self):
         if self.requestType == "POST":
-            ret = requests.post(self.KBB_API_ENDPOINT + self.url, params = self.params, data = self.data)
+            ret = requests.post(self.KBB_API_ENDPOINT + self.url, params = self.params, json = self.data)
         else: #DEFAULT IS GET
             ret = requests.get(self.KBB_API_ENDPOINT + self.url, params=self.params)
         self.resetVariables()
