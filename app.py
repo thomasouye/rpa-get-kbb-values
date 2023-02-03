@@ -15,23 +15,49 @@
 import signal
 import sys
 from types import FrameType
+import os
+import requests
 
-from flask import Flask
+from kbb import Kbb
+
+
+from flask import Flask, request
 
 from utils.logging import logger
 
 app = Flask(__name__)
 
+#Set kbb api key environment variable if it doesn't exist yet (running locally)
+if not "kbb_api_key" in os.environ:
+    import yaml
+    with open("env.yaml") as y:
+        env = yaml.load(y, Loader=yaml.FullLoader)
+        os.environ["kbb_api_key"] = env['kbb_api_key']
 
-@app.route("/")
-def hello() -> str:
-    # Use basic logging with custom fields
-    logger.info(logField="custom-entry", arbitraryField="custom-entry")
+@app.route("/", methods=["POST"])
+def run() -> str:
+    data = request.get_json()
 
-    # https://cloud.google.com/run/docs/logging#correlate-logs
-    logger.info("Child logger with trace Id.")
+    vin = data["vin"]
+    mileage = data["mileage"]
+    zipCode = data["zip"]
 
-    return "Hello, World!"
+    kbb = Kbb(os.environ["kbb_api_key"])
+    try:
+        return kbb.getValueByVin(vin, mileage, zipCode)
+    except Exception as e:
+        return str(e)
+        
+    
+
+# def kbb_test_call(vin):
+#     params = dict()
+#     params["api_key"] = os.environ["kbb_api_key"]
+#     params["VehicleClass"] = "UsedCar"
+#     r = requests.get(config.KBB_API_ENDPOINT + config.KBB_VIN_ENDPOINT + vin, params=params)
+#     response = r.json()
+#     return response
+
 
 
 def shutdown_handler(signal_int: int, frame: FrameType) -> None:
