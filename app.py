@@ -41,13 +41,36 @@ def run() -> str:
     vin = data["vin"]
     mileage = data["mileage"]
     zipCode = data["zip"]
+    make = data["make"]
+    model = data["model"]
+    year = data["year"]
+    trim = data["trim"]
 
     kbb = Kbb(os.environ["kbb_api_key"])
-    try:
-        return kbb.getValueByVin(vin, mileage, zipCode)
-    except Exception as e:
-        return str(e)
-        
+    # try:
+    #     return kbb.getValueByVin(vin, mileage, zipCode)
+    # except Exception as e:
+    #     return str(e)
+    errors = []
+    values = []
+    modelMatchesVin = False
+
+    if vin:
+        try:
+            values = kbb.getValueByVin(vin, mileage, zipCode)
+        except Exception as e:
+            errors.append(str(e))
+        try:
+            modelMatchesVin = kbb.compareVehicleVinAndName(vin, year, make, model, trim)
+        except Exception as e:
+            errors.append(str(e))
+    else:
+        try:
+            values = kbb.getValueByName(year, make, model, trim, mileage, zipCode)
+        except Exception as e:
+            errors.append(str(e))
+
+    return {"modelMatchesVin": modelMatchesVin, "errors": errors, "values": values}
     
 
 # def kbb_test_call(vin):
