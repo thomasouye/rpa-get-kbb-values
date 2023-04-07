@@ -372,5 +372,5 @@ class Kbb:
                 "vehicleId": vehicleId, 
                 "originalOptions": list(originalOptionNames), 
                 "availableOptions": str( [x["optionName"] for x in availableVehicleOptions ]),
-                "values": values
+                "prices": values["prices"]
                 }
