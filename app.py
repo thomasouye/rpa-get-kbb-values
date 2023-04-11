@@ -16,7 +16,6 @@ import signal
 import sys
 from types import FrameType
 import os
-import requests
 
 from kbb import Kbb
 from vehicledatareader import VehicleDataReader
@@ -38,11 +37,18 @@ if not "kbb_api_key" in os.environ:
 
 @app.route("/", methods=["POST"])
 def run() -> str:
-    kbb = Kbb(os.environ["kbb_api_key"])
     dataReader = VehicleDataReader()
     #limit used to cap the max number of calls
-    #limit = float("inf")
-    limit = 3
+    limit = request.args.get('limit', default=float("inf"), type = float)
+    #report used to flag whether or not to generate a detailed report
+    report = request.args.get('report', default="N", type = str)
+    #prices used to denote whether to return prices (better off for debugging)
+    prices = request.args.get('prices', default = "Y", type = str)
+
+    pricing = True if prices == 'Y' else False
+    reporting = True if report == 'Y' else False
+
+    kbb = Kbb(os.environ["kbb_api_key"], reporting)
 
     if request.is_json:
         data = request.get_json()
@@ -62,15 +68,12 @@ def run() -> str:
 
     for record in records:
         count+=1
-        #report = {}
         try:
-            if "vin" in record:
-                report = kbb.getVehicleValueReportByVINAndTrim(record[dataReader.VIN], record[dataReader.TRIM],  record[dataReader.MILEAGE], "96819", record[dataReader.OPTIONS])
-            else:
-                report = kbb.getValueByName(record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record[dataReader.TRIM], record[dataReader.MILEAGE], "96819")
-            
-            if "configuredValue" in report and report["configuredValue"] > 0:
+            report = kbb.getVehicleValue(record[dataReader.VIN], record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record[dataReader.TRIM],  record[dataReader.MILEAGE], "96819", record[dataReader.OPTIONS])
+            if "prices" in report:
                 matched+=1
+                if not pricing:
+                    report.pop("prices")
             if "usedLowestPricedTrim" in report and report["usedLowestPricedTrim"]:
                 notrimmatch+=1
             if "numCallsMade" in report:
