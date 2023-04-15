@@ -35,6 +35,14 @@ class Kbb:
         "LV8": "V8"
     }
 
+    #Remove substrings in this list from options
+    OPTION_REMOVE =[
+        "w/",
+        ",",
+        "(",
+        ")"
+    ]
+
     #Convert Servco option names -> Kbb names
     OPTION_CONVERSION={
         "Package": "Pkg",
@@ -52,16 +60,19 @@ class Kbb:
         "V6",
         "4-Cyl",
         "V8",
-        "Hybrid"
+        "Hybrid",
+        "AWD"
     ]
-    #Number of words in an option that need to match the KBB side
+    #Number of words in an option that need to match the KBB side ***Out of use currently, went with percentage instead
     OPTION_MATCH_WORD_COUNT = 2 
     #Percentage of words that need to match
     OPTION_MATCH_PERCENTAGE=0.51
     #If any of these words are in the option, match the KBB side and bypass the word count
     BYPASS_OPTIONS = [
         "Sonar",
-        "Entune"
+        "Entune",
+        "ABS",
+        "FWD"
     ]
 
     def __init__(self, api_key, report = False) -> None:
@@ -230,10 +241,23 @@ class Kbb:
 
     def convertOptionNames(self, options):
         convertedOptions = list(map(self.convertServcoOptionName, options))
+        convertedOptions = self.cleanOptionNames(convertedOptions) ## clean the options here too
         return convertedOptions
 
+    def cleanKBBOptionNames(self, options):
+        for index in range(len(options)):
+            for substr in self.OPTION_REMOVE:
+                options[index]['optionName'] = options[index]['optionName'].replace(substr, "")
+        return options
+
+    def cleanOptionNames(self, options):
+        for index in range(len(options)):
+            for substr in self.OPTION_REMOVE:
+                options[index] = options[index].replace(substr, "")
+        return options
+
     def getVehicleOptionCodes(self, options):
-        KBBVehicleOptions = self.vehicle["vehicleOptions"]
+        KBBVehicleOptions = self.cleanKBBOptionNames(self.vehicle["vehicleOptions"])
         
         options = self.getOptionNamesFromTrimName(options)
 
@@ -241,6 +265,7 @@ class Kbb:
         options = self.convertOptionNames(options)
         optionCodes = set()
         optionCodeNames = set()
+        #print(str(len(options)))
         for option in options:
             matchCount = 0
 
@@ -252,14 +277,18 @@ class Kbb:
                     break
             if blacklisted:
                 break
-            
+            #print('--------------------------------------------------------------')
+            #print(option)
             for optionWord in option.split():
                 savedOptions = KBBVehicleOptions
                 KBBVehicleOptions = list(filter(lambda x: (optionWord.upper() in x["optionName"].replace(",", "").upper().split()), KBBVehicleOptions))
-                
+                #print('--' + optionWord)
+                #print('--' + str( [x["optionName"] for x in KBBVehicleOptions ]))
+                #print('----' + str(matchCount))
                 if len(KBBVehicleOptions) == 1:  #Only one option remains
                     matchCount += 1
-                    if optionWord in self.BYPASS_OPTIONS or optionWord in self.OPTIONS_IN_TRIM or (matchCount == self.OPTION_MATCH_WORD_COUNT and (matchCount/len(KBBVehicleOptions[0]["optionName"].split()) > self.OPTION_MATCH_PERCENTAGE)):
+                    if optionWord in self.BYPASS_OPTIONS or optionWord in self.OPTIONS_IN_TRIM or matchCount/len(KBBVehicleOptions[0]["optionName"].split()) > self.OPTION_MATCH_PERCENTAGE:
+                        #print('*------' + KBBVehicleOptions[0]["optionName"])
                         optionCodes.add(KBBVehicleOptions[0]["vehicleOptionId"])
                         optionCodeNames.add(str(KBBVehicleOptions[0]["vehicleOptionId"]) + " - " + KBBVehicleOptions[0]["optionName"])
                         break
@@ -353,7 +382,11 @@ class Kbb:
 
     def generateKBBReport(self, vin, trimName, trimNameConverted, errors):
         vehicleId = self.vehicle["vehicleId"]
-        configuredValue = self.values["prices"][0]["configuredValue"]
+        configuredValue = 0
+        prices = {}
+        if "prices" in self.values:
+            configuredValue = self.values["prices"][0]["configuredValue"]
+            prices = self.values["prices"]
         matchedVehicle = self.vehicle["trimName"]
         trimNames = self.getTrimNames()
         optionCodeNames = self.optionCodeNames
@@ -361,7 +394,7 @@ class Kbb:
         availableVehicleOptions = []
         if "vehicleOptions" in self.vehicle:
             availableVehicleOptions = self.vehicle["vehicleOptions"]
-        prices = self.values["prices"]
+
         usedLowestPricedTrim = self.usedLowestPricedTrim
         callsMade = self.callsMade
         self.doneProcessingVehicle()
@@ -387,8 +420,8 @@ class Kbb:
         usedLowestPricedTrim = self.usedLowestPricedTrim
         self.doneProcessingVehicle()
         return {"errors": errors,
-                "numCallsMade": callsMade, 
                 "usedLowestPricedTrim": usedLowestPricedTrim,
+                "numCallsMade": callsMade, 
                 "vin": vin,
                 "prices": prices}
         
