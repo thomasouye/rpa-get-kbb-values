@@ -171,8 +171,9 @@ class Kbb:
 
     def getTrimNames(self):
         trimNames = []
-        for trim in self.trims:
-            trimNames.append(trim["trimName"])
+        if self.trims:
+            for trim in self.trims:
+                trimNames.append(trim["trimName"])
         return trimNames
 
     def getVehicleByVinAndTrim(self, vin, trimName):
@@ -372,6 +373,8 @@ class Kbb:
     
 
     def getValueByName(self, year, makeName, modelName, trimName, mileage, zipCode, options = []):
+        if modelName.strip() == trimName.strip() or not trimName:
+            raise Exception('Valuation requires either VIN or year/make/model/trim.')
         vehicleId = self.getVehicleIdByName(year, makeName, modelName, trimName)
         self.vehicle["vehicleOptions"] = self.getOptionsByVehicleId(vehicleId)["items"]
         vehicleOptionIds = self.getVehicleOptionCodes(options)
@@ -381,19 +384,19 @@ class Kbb:
         return self.getVehicleIdByName(year, makeName, modelName, trimName) == self.getVehicleIdByVinAndTrim(vin, trimName)
 
     def generateKBBReport(self, vin, trimName, trimNameConverted, errors):
-        vehicleId = self.vehicle["vehicleId"]
+        vehicleId = self.vehicle.get("vehicleId")
         configuredValue = 0
         prices = {}
         if "prices" in self.values:
             configuredValue = self.values["prices"][0]["configuredValue"]
             prices = self.values["prices"]
-        matchedVehicle = self.vehicle["trimName"]
+        matchedVehicle = self.vehicle.get("trimName")
         trimNames = self.getTrimNames()
         optionCodeNames = self.optionCodeNames
         originalOptionNames = self.originalOptionNames
-        availableVehicleOptions = []
+        availableVehicleOptions = ""
         if "vehicleOptions" in self.vehicle:
-            availableVehicleOptions = self.vehicle["vehicleOptions"]
+            availableVehicleOptions = str( [x.get("optionName") for x in self.vehicle.get("vehicleOptions")])
 
         usedLowestPricedTrim = self.usedLowestPricedTrim
         callsMade = self.callsMade
@@ -410,13 +413,13 @@ class Kbb:
                 "availableTrims": trimNames, 
                 "vehicleId": vehicleId, 
                 "originalOptions": list(originalOptionNames), 
-                "availableOptions": str( [x["optionName"] for x in availableVehicleOptions ]),
+                "availableOptions": availableVehicleOptions,
                 "prices": prices
                 }
 
     def generateReturnValues(self, vin, errors):
         callsMade = self.callsMade
-        prices = self.values["prices"]
+        prices = self.values.get("prices")
         usedLowestPricedTrim = self.usedLowestPricedTrim
         self.doneProcessingVehicle()
         return {"errors": errors,
@@ -429,15 +432,17 @@ class Kbb:
     def getVehicleValue(self, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions):
         errors = []
         values = {}
-
+        
         trimNameConverted = trimName
         trimNameConverted = self.convertServcoTrimName(trimName)
         self.servcoTrimName = trimNameConverted
 
         try:
             if vin:
+                print(vin)
                 values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
             else:
+                print(trimName)
                 values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
             self.values = values
         except Exception as e:

@@ -16,7 +16,7 @@ class VehicleDataReader:
     CSV_MODEL_COLUMN = "ModelName"
     CSV_TRIM_COLUMN = "BodyStyle"
     CSV_OPTION_COLUMN = "OptionDescription"
-    CSV_MILEAGE_COLUMN = ""
+    CSV_MILEAGE_COLUMN = "Mileage"
 
 
     def __init__(self) -> None:
@@ -29,7 +29,7 @@ class VehicleDataReader:
             year = row.pop(self.CSV_YEAR_COLUMN, None)
             make = row.pop(self.CSV_MAKE_COLUMN, None)
             model = row.pop(self.CSV_MODEL_COLUMN, None)
-            trim = row.pop(self.CSV_TRIM_COLUMN, None)
+            trim = row.pop(self.CSV_TRIM_COLUMN, "")
             mileage = row.pop(self.CSV_MILEAGE_COLUMN, None)
 
             if mileage and mileage.isdigit():
@@ -40,7 +40,8 @@ class VehicleDataReader:
             
             if vin not in self.vehicleData:
                 options = set()
-                options.add(option)
+                if option:
+                    options.add(option)
                 vehicle = {self.VIN: vin, 
                            self.YEAR: year, 
                            self.MAKE: make, 
@@ -50,5 +51,6 @@ class VehicleDataReader:
                            self.OPTIONS: options}
                 self.vehicleData[vin] = vehicle
             else:
-                self.vehicleData[vin]["options"].add(option)
+                if option:
+                    self.vehicleData[vin]["options"].add(option)
         return self.vehicleData.values()

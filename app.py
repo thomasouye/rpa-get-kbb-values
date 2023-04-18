@@ -69,7 +69,7 @@ def run() -> str:
     for record in records:
         count+=1
         try:
-            report = kbb.getVehicleValue(record.get(dataReader.VIN), record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record[dataReader.TRIM],  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
+            report = kbb.getVehicleValue(record.get(dataReader.VIN), record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
             if "prices" in report:
                 matched+=1
                 if not pricing:
@@ -79,14 +79,21 @@ def run() -> str:
             if "numCallsMade" in report:
                 totalCalls+=report["numCallsMade"]
         except Exception as e:
-            report = {"errors": str(e)}
+            error = []
+            error.append(str(e))
+            report = {"vin": record.get(dataReader.VIN), 
+                      "year": record.get(dataReader.YEAR), 
+                      "make": record.get(dataReader.MAKE), 
+                      "model": record.get(dataReader.MODEL), 
+                      "trim": record.get(dataReader.TRIM), 
+                      "errors": error}
             raise e
         if "errors" in report:
             errors+=len(report["errors"])
         values.append(report)
         if count == limit:
             break
-        if errors > count * 0.2: #If there is more than 20% error stop trying
+        if float(errors) > float(count) * 0.2: #If there is more than 20% error stop trying
             break
     
     ret = {"count": count, "matched": matched, "errors": errors, "totalCallsMade": totalCalls, "remainingCalls": kbb.rateLimit, "usedLowestPricedTrim":notrimmatch, "values": values}
