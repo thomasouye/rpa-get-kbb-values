@@ -1,6 +1,7 @@
 import io
 import csv
 class VehicleDataReader:
+    ID = "id"
     VIN = "vin"
     YEAR = "year"
     MAKE = "make"
@@ -10,6 +11,7 @@ class VehicleDataReader:
     ZIP = "zip"
     OPTIONS = "options"
 
+    CSV_ID_COLUMN = "ID"
     CSV_VIN_COLUMN = "VIN"
     CSV_YEAR_COLUMN = "YEAR"
     CSV_MAKE_COLUMN = "MakeName"
@@ -24,7 +26,10 @@ class VehicleDataReader:
 
     def csvInput(self, csvData):
         csvReader = csv.DictReader(io.StringIO(csvData))
+        count = 0
         for row in csvReader:
+            count += 1
+            id = row.pop(self.CSV_ID_COLUMN, count)
             vin = row.pop(self.CSV_VIN_COLUMN, None)
             year = row.pop(self.CSV_YEAR_COLUMN, None)
             make = row.pop(self.CSV_MAKE_COLUMN, None)
@@ -42,7 +47,8 @@ class VehicleDataReader:
                 options = set()
                 if option:
                     options.add(option)
-                vehicle = {self.VIN: vin, 
+                vehicle = {self.ID: id,
+                           self.VIN: vin, 
                            self.YEAR: year, 
                            self.MAKE: make, 
                            self.MODEL: model, 
