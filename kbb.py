@@ -9,7 +9,7 @@ class Kbb:
     KBB_VEHICLE_VALUE_ENDPOINT = "vehicle/values"
     KBB_VEHICLE_MAKE_ENDPOINT = "vehicle/makes"
     KBB_OPTION_ENDPOINT = "vehicle/vehicleoptions"
-    KBB_VEHICLE_LIMIT = 500 #500 is the max limiut to send to KBB
+    KBB_VEHICLE_LIMIT = 500 #500 is the max limit to send to KBB
     KBB_VEHICLE_MODEL_ENDPOINT = "vehicle/models"
     KBB_VEHICLE_VEHICLES_ENDPOINT = "vehicle/vehicles"
     KBB_SUCCESS_LOG_MESSAGE = "KBB API call made!"
@@ -143,7 +143,10 @@ class Kbb:
             self.trims = result["vinResults"]
             return self.trims
         else: 
-            raise Exception(result["message"])
+            if "message" in result:
+                raise Exception(result["message"])
+            else:
+                raise Exception(str(result))
 
     def replace(self,match):
         return self.TRIM_CONVERSION[match.group(0)]
