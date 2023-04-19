@@ -69,7 +69,7 @@ def run() -> str:
     for record in records:
         count+=1
         try:
-            report = kbb.getVehicleValue(record.get(dataReader.VIN), record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
+            report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
             if "prices" in report:
                 matched+=1
                 if not pricing:
@@ -87,7 +87,6 @@ def run() -> str:
                       "model": record.get(dataReader.MODEL), 
                       "trim": record.get(dataReader.TRIM), 
                       "errors": error}
-            raise e
         if "errors" in report:
             errors+=len(report["errors"])
         values.append(report)
