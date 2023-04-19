@@ -68,7 +68,6 @@ def run() -> str:
 
     for record in records:
         count+=1
-        print(count)
         try:
             report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
             if "prices" in report:

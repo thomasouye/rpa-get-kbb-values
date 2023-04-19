@@ -9,9 +9,9 @@ class Kbb:
     KBB_VEHICLE_VALUE_ENDPOINT = "vehicle/values"
     KBB_VEHICLE_MAKE_ENDPOINT = "vehicle/makes"
     KBB_OPTION_ENDPOINT = "vehicle/vehicleoptions"
-    KBB_VEHICLE_LIMIT = 500 #500 is the max limit to send to KBB
     KBB_VEHICLE_MODEL_ENDPOINT = "vehicle/models"
     KBB_VEHICLE_VEHICLES_ENDPOINT = "vehicle/vehicles"
+    KBB_VEHICLE_LIMIT = 500 #500 is the max limit to send to KBB
     KBB_SUCCESS_LOG_MESSAGE = "KBB API call made!"
     KBB_TIME_WAIT = 0 #Seconds to wait between calls
     DEFAULT_ZIP = "96819" #Default zip code for kbb pricing
@@ -66,10 +66,10 @@ class Kbb:
     #Number of words in an option that need to match the KBB side ***Out of use currently, went with percentage instead
     OPTION_MATCH_WORD_COUNT = 2 
 
-    #Percentage of words that need to match
+    #Percentage of words that need to match as a decimal
     OPTION_MATCH_PERCENTAGE=0.51
 
-    #If any of these words are in the option, match the KBB side and bypass the word count
+    #If any of these words are in the option, match the KBB side and bypass the word count/percentage
     BYPASS_OPTIONS = [
         "Sonar",
         "Entune",
@@ -242,9 +242,10 @@ class Kbb:
         return self.values
 
     def getOptionNamesFromTrimName(self, options):
-        for trimWord in self.servcoTrimName.split():
-            if trimWord in self.OPTIONS_IN_TRIM:
-                options.add(trimWord)
+        if self.servcoTrimName:
+            for trimWord in self.servcoTrimName.split():
+                if trimWord in self.OPTIONS_IN_TRIM:
+                    options.add(trimWord)
         return options
 
     def convertOptionNames(self, options):
@@ -373,13 +374,16 @@ class Kbb:
             if len(vehicles) == 1:
                 exit
         if len(vehicles) != 1:
-            raise Exception("Could not narrow down KBB trims: " + str(vehicles))
+            return None
         return vehicles[0]
 
     def getVehicleIdByName(self, year, makeName, modelName, trimName):
         vehicle = self.getVehicleByName(year, makeName, modelName, trimName)
-        self.vehicle = vehicle
-        return vehicle["vehicleId"]
+        if vehicle:
+            self.vehicle = vehicle
+            return vehicle["vehicleId"]
+        else:
+            return None
 
     def getVehicleIdByNameNotrim(self, year, makeName, modelName, mileage, zipCode):
         self.trims = self.getTrimsByModelId(year, makeName, modelName)["items"]
@@ -388,10 +392,11 @@ class Kbb:
         return vehicleId
 
     def getValueByName(self, year, makeName, modelName, trimName, mileage, zipCode, options = []):
-        if modelName.strip() == trimName.strip() or not trimName:
-            vehicleId = self.getVehicleIdByNameNotrim(year, makeName, modelName, mileage, zipCode)
-        else:
+        vehicleId = None
+        if trimName and modelName.strip() != trimName.strip():
             vehicleId = self.getVehicleIdByName(year, makeName, modelName, trimName)
+        if not vehicleId:
+            vehicleId = self.getVehicleIdByNameNotrim(year, makeName, modelName, mileage, zipCode)
         self.vehicle["vehicleOptions"] = self.getOptionsByVehicleId(vehicleId)["items"]
         vehicleOptionIds = self.getVehicleOptionCodes(options)
         return self.getValueByVehicleId(vehicleId, mileage, zipCode, vehicleOptionIds)
@@ -453,7 +458,8 @@ class Kbb:
         values = {}
         
         trimNameConverted = trimName
-        trimNameConverted = self.convertServcoTrimName(trimName)
+        if trimName:
+            trimNameConverted = self.convertServcoTrimName(trimName)
         self.servcoTrimName = trimNameConverted
         self.id = id
 
@@ -465,6 +471,7 @@ class Kbb:
             self.values = values
         except Exception as e:
             errors.append(str(e))
+            raise e
         if not self.originalOptionNames:
             self.originalOptionNames = vehicleOptions
         if self.report:
