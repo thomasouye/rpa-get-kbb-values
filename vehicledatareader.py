@@ -40,10 +40,13 @@ class VehicleDataReader:
             if mileage and mileage.isdigit():
                 mileage = int(mileage)
 
-
             option = row.pop(self.CSV_OPTION_COLUMN, None)
             
-            if vin not in self.vehicleData:
+            key = vin if vin else str(id)
+            print(key)
+
+            if key not in self.vehicleData:
+                print(key)
                 options = set()
                 if option:
                     options.add(option)
@@ -55,8 +58,10 @@ class VehicleDataReader:
                            self.TRIM: model + ' ' + trim, 
                            self.MILEAGE: mileage, 
                            self.OPTIONS: options}
-                self.vehicleData[vin] = vehicle
+                self.vehicleData[key] = vehicle
             else:
                 if option:
-                    self.vehicleData[vin]["options"].add(option)
+                    self.vehicleData[key]["options"].add(option)
+        print(str(self.vehicleData))
+        print(str(self.vehicleData.values()))
         return self.vehicleData.values()
