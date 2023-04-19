@@ -242,9 +242,10 @@ class Kbb:
         return self.values
 
     def getOptionNamesFromTrimName(self, options):
-        for trimWord in self.servcoTrimName.split():
-            if trimWord in self.OPTIONS_IN_TRIM:
-                options.add(trimWord)
+        if self.servcoTrimName:
+            for trimWord in self.servcoTrimName.split():
+                if trimWord in self.OPTIONS_IN_TRIM:
+                    options.add(trimWord)
         return options
 
     def convertOptionNames(self, options):
@@ -457,7 +458,8 @@ class Kbb:
         values = {}
         
         trimNameConverted = trimName
-        trimNameConverted = self.convertServcoTrimName(trimName)
+        if trimName:
+            trimNameConverted = self.convertServcoTrimName(trimName)
         self.servcoTrimName = trimNameConverted
         self.id = id
 

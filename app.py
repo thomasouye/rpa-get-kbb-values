@@ -87,7 +87,6 @@ def run() -> str:
                       "model": record.get(dataReader.MODEL), 
                       "trim": record.get(dataReader.TRIM), 
                       "errors": error}
-            raise e
         if "errors" in report:
             errors+=len(report["errors"])
         values.append(report)
