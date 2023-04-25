@@ -37,25 +37,30 @@ if not "kbb_api_key" in os.environ:
 
 @app.route("/", methods=["POST"])
 def run() -> str:
-    dataReader = VehicleDataReader()
     #limit used to cap the max number of calls
     limit = request.args.get('limit', default=float("inf"), type = float)
     #report used to flag whether or not to generate a detailed report
     report = request.args.get('report', default="N", type = str)
     #prices used to denote whether to return prices (better off for debugging)
     prices = request.args.get('prices', default = "Y", type = str)
+    #validation is used to denote what validation mode to use.
+    #mode 1: VIN or YMM
+    #mode 2: VIN, YMM, mileage
+    #mode 3: VIN, YMM, mileage, trim
+    #mode 4: VIN, YMM mileage, trim, options
+    validation = request.args.get('validation', default = 3, type = int)
 
     pricing = True if prices == 'Y' else False
     reporting = True if report == 'Y' else False
 
     kbb = Kbb(os.environ["kbb_api_key"], reporting)
 
+    dataReader = VehicleDataReader(validation)
     if request.is_json:
         data = request.get_json()
-        records = data["vehicles"]
+        records = dataReader.jsonInput(data)
     else:
         csv = request.get_data().decode()
-        dataReader = VehicleDataReader()
         records = dataReader.csvInput(str(csv))
 
     #----Value Vehicles-------------------------------
@@ -69,7 +74,9 @@ def run() -> str:
     for record in records:
         count+=1
         try:
-            report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record[dataReader.YEAR], record[dataReader.MAKE], record[dataReader.MODEL], record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
+            if dataReader.ERRORS in record:
+                raise Exception(str(record[dataReader.ERRORS]))
+            report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
             if "prices" in report:
                 matched+=1
                 if not pricing:
@@ -90,7 +97,7 @@ def run() -> str:
         if "errors" in report:
             errors+=len(report["errors"])
         values.append(report)
-        if count == limit:
+        if count == limit: #If we hit the limit, stop
             break
         if float(errors) > float(count) * 0.2: #If there is more than 20% error stop trying
             break

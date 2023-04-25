@@ -464,14 +464,13 @@ class Kbb:
         self.id = id
 
         try:
-            if vin:
+            if vin and trimNameConverted:
                 values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
             else:
                 values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
             self.values = values
         except Exception as e:
             errors.append(str(e))
-            raise e
         if not self.originalOptionNames:
             self.originalOptionNames = vehicleOptions
         if self.report:
