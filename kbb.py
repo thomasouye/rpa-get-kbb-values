@@ -335,7 +335,7 @@ class Kbb:
                 makeId = make["makeId"]
                 exit
         if not makeId > 0:
-            raise Exception("Could not determine KBB make ID")
+            raise Exception("Could not determine KBB make.")
         return makeId
 
     def getModelIdByName(self, year, makeName, modelName):
@@ -352,7 +352,7 @@ class Kbb:
                 modelIds.append(model["modelId"])
                 exit
         if len(modelIds) == 0:
-            raise Exception("Could not determine KBB model ID")
+            raise Exception("Could not determine KBB model.")
         elif len(modelIds) > 1: #technically not necessary for now
             raise Exception("Could not narrow down KBB model IDs: " + str(modelIds))
         return modelIds[0]
