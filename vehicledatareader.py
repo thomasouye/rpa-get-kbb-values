@@ -12,7 +12,7 @@ class Vehicle(BaseModel):
     trim: str = ''
     mileage: int = None
     zip: str = None
-    options: Set[str] = None
+    options: Set[str] = set()
     validation: int = 3
 
     def get(self, attribute, default = None):
@@ -89,12 +89,12 @@ class VehicleDataReader:
             make = row.get(self.CSV_MAKE_COLUMN, None)
             model = row.get(self.CSV_MODEL_COLUMN, None)
             trim = row.get(self.CSV_TRIM_COLUMN, "")
-            mileage = row.get(self.CSV_MILEAGE_COLUMN, None)
+            mileage = row.get(self.CSV_MILEAGE_COLUMN, None).replace('"', "").replace(",", "")
 
             if mileage and mileage.isdigit():
                 mileage = int(mileage)
 
-            option = row.get(self.CSV_OPTION_COLUMN, None)
+            option = row.get(self.CSV_OPTION_COLUMN, [])
             
             key = vin if vin else str(id)
 
@@ -136,7 +136,7 @@ class VehicleDataReader:
                     else:
                         self.vehicleData[key][self.OPTIONS].add(option)
 
-        return self.vehicleData
+        return self.vehicleData.values()
 
     def jsonInput(self, jsonData):
         count = 0
@@ -152,7 +152,7 @@ class VehicleDataReader:
             except Exception as e:
                 row[self.ERRORS] = str(e)
                 self.vehicleData[key] = row
-        return self.vehicleData
+        return self.vehicleData.values()
 
 
 

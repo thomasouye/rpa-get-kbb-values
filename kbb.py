@@ -186,7 +186,9 @@ class Kbb:
     def getVehicleByVinAndTrim(self, vin, trimName):
         self.trims = self.getTrimsByVin(vin)
         trims = self.trims
-        trimWords = trimName.split()
+        trimWords = []
+        if trimName:
+            trimWords = trimName.split()
         for trimWord in trimWords:
             if len(trims) == 1:
                 break
@@ -269,9 +271,9 @@ class Kbb:
         KBBVehicleOptions = self.cleanKBBOptionNames(self.vehicle["vehicleOptions"])
         
         options = self.getOptionNamesFromTrimName(options)
-
-        self.originalOptionNames = options
-        options = self.convertOptionNames(options)
+        if options:
+            self.originalOptionNames = options
+            options = self.convertOptionNames(options)
         optionCodes = set()
         optionCodeNames = set()
         #print(str(len(options)))
@@ -398,6 +400,7 @@ class Kbb:
         if not vehicleId:
             vehicleId = self.getVehicleIdByNameNotrim(year, makeName, modelName, mileage, zipCode)
         self.vehicle["vehicleOptions"] = self.getOptionsByVehicleId(vehicleId)["items"]
+        print(options)
         vehicleOptionIds = self.getVehicleOptionCodes(options)
         return self.getValueByVehicleId(vehicleId, mileage, zipCode, vehicleOptionIds)
 
@@ -464,14 +467,15 @@ class Kbb:
         self.id = id
 
         try:
-            if vin and trimNameConverted:
+            if vin:
                 values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
             else:
                 values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
             self.values = values
         except Exception as e:
             errors.append(str(e))
-        if not self.originalOptionNames:
+            raise e
+        if not self.originalOptionNames and vehicleOptions:
             self.originalOptionNames = vehicleOptions
         if self.report:
             return self.generateKBBReport(vin, trimName, trimNameConverted, errors)

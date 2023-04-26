@@ -76,7 +76,7 @@ def run() -> str:
         try:
             if dataReader.ERRORS in record:
                 raise Exception(str(record[dataReader.ERRORS]))
-            report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS))
+            report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS, set()))
             if "prices" in report:
                 matched+=1
                 if not pricing:
@@ -94,6 +94,7 @@ def run() -> str:
                       "model": record.get(dataReader.MODEL), 
                       "trim": record.get(dataReader.TRIM), 
                       "errors": error}
+            raise e
         if "errors" in report:
             errors+=len(report["errors"])
         values.append(report)
