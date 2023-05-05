@@ -14,6 +14,8 @@ class Kbb:
     KBB_VEHICLE_LIMIT = 500 #500 is the max limit to send to KBB
     KBB_SUCCESS_LOG_MESSAGE = "KBB API call made!"
     KBB_TIME_WAIT = 0 #Seconds to wait between calls
+    KBB_RETRY_WAIT = 1 #Seconds to wait before retrying a call
+    KBB_MAX_RETRIES = 60 #Number of retries before failing a vehicle pricing
     DEFAULT_ZIP = "96819" #Default zip code for kbb pricing
 
     #Convert Servco trim names -> KBB trim names
@@ -21,9 +23,12 @@ class Kbb:
         "PKUP": "Pickup",
         "PR": "Premium",
         "P": "Premium",
+        "PREM": "Premium",
         "SPT": "Sport",
         "LT": "Limited",
+        "LTD": "Limited",
         "LMT": "Limited",
+        "TOUR": "Touring",
         "OFF": "Off-Road",
         "A-6'": "6 ft",
         "D-5'": "5 ft",
@@ -32,7 +37,11 @@ class Kbb:
         "4WD": "4WD",
         "4x4": "4WD",
         "L4": "4-Cyl",
-        "LV8": "V8"
+        "LV8": "V8",
+        "WAG": "Wagon",
+        "SDN": "Sedan",
+        "6MT": "Manual 6-Spd",
+        "5MT": "Manual 5-Spd"
     }
 
     #Remove substrings in this list from options
@@ -45,13 +54,17 @@ class Kbb:
 
     #Convert Servco option names -> Kbb names
     OPTION_CONVERSION={
+        "&": " ",
         "Package": "Pkg",
-        "Moonroof": "Moon roof",
-        "Wheel": "Wheels"
+        "Power Moonroof": "Moon Roof",
+        "Moonroof": "Moon Roof",
+        "Wheel": "Wheels",
+        "Blind Spot": "Blind-Spot",
+        "Navi": "Navigation"
     }
 
     #Ignore the option if it has any of the words in OPTION_IGNORE
-    OPTION_IGNORE = ["Fixed"]
+    OPTION_IGNORE = ["Fixed", "Wheel Locks", "Delete"]
 
     #Options that are included in the Servco trim name
     OPTIONS_IN_TRIM = [
@@ -61,7 +74,9 @@ class Kbb:
         "4-Cyl",
         "V8",
         "Hybrid",
-        "AWD"
+        "AWD",
+        "CVT",
+        "Manual 6-Spd"
     ]
     #Number of words in an option that need to match the KBB side ***Out of use currently, went with percentage instead
     OPTION_MATCH_WORD_COUNT = 2 
@@ -74,7 +89,9 @@ class Kbb:
         "Sonar",
         "Entune",
         "ABS",
-        "FWD"
+        "FWD",
+        "Blind-Spot",
+        "Starlink"
     ]
 
     def __init__(self, api_key, report = False) -> None:
@@ -91,8 +108,13 @@ class Kbb:
         self.originalOptionNames = set()
         self.usedLowestPricedTrim = False
         self.callsMade = 0
-        self.rateLimit = 0
+        self.rateLimit = float("inf")
         self.report = report
+        self.debug = False
+    
+    def print(self, string):
+        if self.debug:
+            print(string)
 
     def resetRequest(self):
         self.url = ""
@@ -117,23 +139,28 @@ class Kbb:
     def setParams(self, params):
         self.params.update(params)
 
-    def submitRequest(self):
+    def submitRequest(self, retries=99): #20 max retries before failing a request ~20 seconds per request
+        if retries > self.KBB_MAX_RETRIES:
+            retries = self.KBB_MAX_RETRIES
         while (datetime.now() - self.lastRequestTime).total_seconds() < self.KBB_TIME_WAIT:
             sleep(self.KBB_TIME_WAIT/5)
         if self.requestType == "POST":
             ret = requests.post(self.KBB_API_ENDPOINT + self.url, params = self.params, json = self.data)
         else: #DEFAULT IS GET
             ret = requests.get(self.KBB_API_ENDPOINT + self.url, params=self.params)
+        if "X-RateLimit-Remaining-Day" in ret.headers: 
+            self.rateLimit = float(ret.headers["X-RateLimit-Remaining-Day"]) #Update the remaining daily count
+        if ret.status_code == 429: #Retry if hit the per second rate limit
+            if "X-RateLimit-Remaining-Day" in ret.headers and float(ret.headers["X-RateLimit-Remaining-Day"]) > 0:
+                sleep(self.KBB_RETRY_WAIT)
+                print("Retry #: " + str(self.KBB_MAX_RETRIES + 1 - retries) + " out of " + str(self.KBB_MAX_RETRIES))
+                return self.submitRequest(retries-1)
+        self.resetRequest()
         if ret.status_code == 200:
             self.callsMade += 1
             print(self.KBB_SUCCESS_LOG_MESSAGE)
-        self.resetRequest()
-        if "X-RateLimit-Remaining-Day" in ret.headers:
-            self.rateLimit = ret.headers["X-RateLimit-Remaining-Day"]
-        try:
             return ret.json()
-        except:
-            raise Exception('The KBB API responded with a ' + str(ret.status_code) + ' status code: ' + ret.content.decode("utf-8"))
+        raise Exception('The KBB API responded with a ' + str(ret.status_code) + ' status code: ' + ret.content.decode("utf-8"))
 
     def getTrimsByVin(self, vin):
         self.params["VehicleClass"] = "UsedCar"
@@ -148,11 +175,7 @@ class Kbb:
             else:
                 raise Exception(str(result))
 
-    def replace(self,match):
-        return self.TRIM_CONVERSION[match.group(0)]
-
     def convertServcoTrimName(self, trimName):
-        #return re.sub('|'.join(r'\b%s\b' % re.escape(s) for s in self.TRIM_CONVERSION), self.replace, trimName) 
         convertedTrimName = ''
         for trimWord in trimName.split():
             for acro, word in self.TRIM_CONVERSION.items():
@@ -167,14 +190,15 @@ class Kbb:
         # return trimName
 
     def convertServcoOptionName(self, optionName):
-        convertedOptionName = ''
-        for optionWord in optionName.replace("&", " ").split():
-            for word, replacement in self.OPTION_CONVERSION.items():
-                if word.upper() == optionWord.upper():
-                    optionWord = replacement
-                    break
-            convertedOptionName += optionWord + ' '
+        convertedOptionName = optionName
+        for word, replacement in self.OPTION_CONVERSION.items():
+            convertedOptionName = convertedOptionName.upper().replace(word.upper(), replacement.upper())
         return convertedOptionName.strip()
+
+    def filterServcoOptions(self, options):
+        for blacklist in self.OPTION_IGNORE:
+            options = [option for option in options if not blacklist.upper() in option.upper()]
+        return options
 
     def getTrimNames(self):
         trimNames = []
@@ -210,9 +234,12 @@ class Kbb:
         useValue = float("inf")
         useTrim = {}
         currValue = float("inf")
+        trimValues = []
         #Try to find the lowest priced trim
         for trim in self.trims:
-            trimValues = self.getValueByVehicleId(trim["vehicleId"], mileage, zipCode, [])["prices"]
+            values = self.getValueByVehicleId(trim["vehicleId"], mileage, zipCode, [])
+            if "prices" in values:
+                trimValues = values["prices"]
             for value in trimValues:
                 #Use 'Typical Listing Price' 
                 if value["priceTypeId"] == 2:
@@ -247,12 +274,13 @@ class Kbb:
         if self.servcoTrimName:
             for trimWord in self.servcoTrimName.split():
                 if trimWord in self.OPTIONS_IN_TRIM:
-                    options.add(trimWord)
+                    options.append(trimWord)
         return options
 
     def convertOptionNames(self, options):
-        convertedOptions = list(map(self.convertServcoOptionName, options))
+        convertedOptions = self.filterServcoOptions(options)
         convertedOptions = self.cleanOptionNames(convertedOptions) ## clean the options here too
+        convertedOptions = list(map(self.convertServcoOptionName, convertedOptions))
         return convertedOptions
 
     def cleanKBBOptionNames(self, options):
@@ -279,15 +307,6 @@ class Kbb:
         #print(str(len(options)))
         for option in options:
             matchCount = 0
-
-            #Ignore options that are blacklisted in self.OPTION_IGNORE
-            blacklisted = False
-            for blacklist in self.OPTION_IGNORE:
-                if blacklist in option.split():
-                    blacklisted = True
-                    break
-            if blacklisted:
-                break
             #print('--------------------------------------------------------------')
             #print(option)
             for optionWord in option.split():
@@ -381,7 +400,7 @@ class Kbb:
 
     def getVehicleIdByName(self, year, makeName, modelName, trimName):
         vehicle = self.getVehicleByName(year, makeName, modelName, trimName)
-        if vehicle:
+        if vehicle and "vehicleId" in vehicle:
             self.vehicle = vehicle
             return vehicle["vehicleId"]
         else:
@@ -400,7 +419,6 @@ class Kbb:
         if not vehicleId:
             vehicleId = self.getVehicleIdByNameNotrim(year, makeName, modelName, mileage, zipCode)
         self.vehicle["vehicleOptions"] = self.getOptionsByVehicleId(vehicleId)["items"]
-        print(options)
         vehicleOptionIds = self.getVehicleOptionCodes(options)
         return self.getValueByVehicleId(vehicleId, mileage, zipCode, vehicleOptionIds)
 
@@ -410,7 +428,7 @@ class Kbb:
     def generateKBBReport(self, vin, trimName, trimNameConverted, errors):
         id = self.id
         vehicleId = self.vehicle.get("vehicleId")
-        configuredValue = 0
+        configuredValue = None
         prices = {}
         if "prices" in self.values:
             configuredValue = self.values["prices"][0]["configuredValue"]
@@ -427,9 +445,9 @@ class Kbb:
         callsMade = self.callsMade
         self.doneProcessingVehicle()
         return {"errors": errors,
-                "id": id,
+                #"id": id,
                 "numCallsMade": callsMade, 
-                "vin": vin, 
+                #"vin": vin, 
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "matchedVehicle": matchedVehicle, 
                 "matchedOptions": list(optionCodeNames), 
@@ -450,10 +468,10 @@ class Kbb:
         id = self.id
         self.doneProcessingVehicle()
         return {"errors": errors,
-                "id": id,
+                #"id": id,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "numCallsMade": callsMade, 
-                "vin": vin,
+                #"vin": vin,
                 "prices": prices}
 
     def getVehicleValue(self, id, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions):
@@ -473,8 +491,8 @@ class Kbb:
                 values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
             self.values = values
         except Exception as e:
+            self.values = {}
             errors.append(str(e))
-            raise e
         if not self.originalOptionNames and vehicleOptions:
             self.originalOptionNames = vehicleOptions
         if self.report:

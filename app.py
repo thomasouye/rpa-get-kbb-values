@@ -16,6 +16,8 @@ import signal
 import sys
 from types import FrameType
 import os
+import threading
+from queue import Queue
 
 from kbb import Kbb
 from vehicledatareader import VehicleDataReader
@@ -35,14 +37,58 @@ if not "kbb_api_key" in os.environ:
         env = yaml.load(y, Loader=yaml.FullLoader)
         os.environ["kbb_api_key"] = env['kbb_api_key']
 
+#GLOBAL VARIABLES
+dataReader = VehicleDataReader()
+records = {}
+count: int
+matchedCount: int
+errorsCount: int
+noTrimMatch: int
+totalCalls: int
+reporting = False
+pricing = True
+threadLock = threading.Lock()
+limit = float("inf")
+remainingCalls = float("inf")
+threads: int
+
+#MAIN FUNCTION
 @app.route("/", methods=["POST"])
 def run() -> str:
+    global limit
+    global pricing
+    global reporting
+    global records
+    global validation
+    global remainingCalls
+    global threads
+
+    global count
+    global errorsCount
+    global matchedCount
+    global noTrimMatch
+    global totalCalls
+
+    global work
+
+    #Reset variables
+    records = {}
+    count = 0
+    matchedCount = 0
+    errorsCount = 0
+    totalCalls = 0
+    noTrimMatch = 0
+
+    vehicleCount = 0
+
     #limit used to cap the max number of calls
     limit = request.args.get('limit', default=float("inf"), type = float)
     #report used to flag whether or not to generate a detailed report
     report = request.args.get('report', default="N", type = str)
     #prices used to denote whether to return prices (better off for debugging)
     prices = request.args.get('prices', default = "Y", type = str)
+    #Set how many threads to run
+    threads = request.args.get('threads', default = 5, type = int)
     #validation is used to denote what validation mode to use.
     #mode 1: VIN or YMM
     #mode 2: VIN, YMM, mileage
@@ -50,12 +96,12 @@ def run() -> str:
     #mode 4: VIN, YMM mileage, trim, options
     validation = request.args.get('validation', default = 3, type = int)
 
+    dataReader = VehicleDataReader(validation, limit)
+
     pricing = True if prices == 'Y' else False
+
     reporting = True if report == 'Y' else False
 
-    kbb = Kbb(os.environ["kbb_api_key"], reporting)
-
-    dataReader = VehicleDataReader(validation)
     if request.is_json:
         data = request.get_json()
         records = dataReader.jsonInput(data)
@@ -63,59 +109,87 @@ def run() -> str:
         csv = request.get_data().decode()
         records = dataReader.csvInput(str(csv))
 
+    vehicleCount = len(records.keys())
     #----Value Vehicles-------------------------------
-    values = []
-    count = 0
-    matched = 0
-    errors = 0
-    notrimmatch = 0
-    totalCalls = 0
 
-    for record in records:
-        count+=1
-        try:
-            if dataReader.ERRORS in record:
-                raise Exception(str(record[dataReader.ERRORS]))
-            report = kbb.getVehicleValue(record.get(dataReader.ID, count), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS, set()))
-            if "prices" in report:
-                matched+=1
-                if not pricing:
-                    report.pop("prices")
-            if "usedLowestPricedTrim" in report and report["usedLowestPricedTrim"]:
-                notrimmatch+=1
-            if "numCallsMade" in report:
-                totalCalls+=report["numCallsMade"]
-        except Exception as e:
-            error = []
-            error.append(str(e))
-            report = {"vin": record.get(dataReader.VIN), 
-                      "year": record.get(dataReader.YEAR), 
-                      "make": record.get(dataReader.MAKE), 
-                      "model": record.get(dataReader.MODEL), 
-                      "trim": record.get(dataReader.TRIM), 
-                      "errors": error}
-            raise e
-        if "errors" in report:
-            errors+=len(report["errors"])
-        values.append(report)
-        if count == limit: #If we hit the limit, stop
-            break
-        if float(errors) > float(count) * 0.2: #If there is more than 20% error stop trying
-            break
+    for record in records.values():
+        work.put(record)
     
-    ret = {"count": count, "matched": matched, "errors": errors, "totalCallsMade": totalCalls, "remainingCalls": kbb.rateLimit, "usedLowestPricedTrim":notrimmatch, "values": values}
+    for i in range(threads-1):
+        thread = threading.Thread(target=worker)
+        thread.daemon = True
+        thread.start()
+    
+    #Wait for threads to finish
+    work.join()
+
+    ret = {"vehicleCount": vehicleCount, "processed": count, "priced": matchedCount, "errors": errorsCount, "totalCallsMade": totalCalls, "remainingCalls": remainingCalls, "usedLowestPricedTrim":noTrimMatch, "vehicles": records}
 
     return ret
 
-# def kbb_test_call(vin):
-#     params = dict()
-#     params["api_key"] = os.environ["kbb_api_key"]
-#     params["VehicleClass"] = "UsedCar"
-#     r = requests.get(config.KBB_API_ENDPOINT + config.KBB_VIN_ENDPOINT + vin, params=params)
-#     response = r.json()
-#     return response
+work = Queue()
 
+def worker():
+    while True:
+        vehicle = work.get()
+        try:
+            job(vehicle)
+        except Exception as e:
+            print(e)
+        work.task_done()
 
+#THREADED JOB
+def job(record):
+    global records
+    global threadLock
+    global reporting
+    global validation
+    
+    global count
+    global errorsCount
+    global matchedCount
+    global noTrimMatch
+    global totalCalls
+
+    kbb = Kbb(os.environ["kbb_api_key"], reporting)
+    errors = []
+    report = {}
+    if float(errorsCount) > float(count) * 0.2: #If there is more than 20% error stop trying
+        return
+    with threadLock:
+        count+=1
+    try:
+        if dataReader.ERRORS in record:
+            raise Exception(str(record[dataReader.ERRORS]))
+        report = kbb.getVehicleValue(record.get(dataReader.ID), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS, set()))
+        if "prices" in report and report["prices"]:
+            with threadLock:
+                matchedCount+=1
+            prices = report.pop("prices")
+            if pricing:
+                records[record.get(dataReader.ID)]["prices"] = prices
+        if "usedLowestPricedTrim" in report and report["usedLowestPricedTrim"]:
+            with threadLock:
+                noTrimMatch+=1
+        if "numCallsMade" in report:
+            with threadLock:
+                totalCalls+=report["numCallsMade"]
+        records[record.get(dataReader.ID)]["report"] = report
+    except Exception as e:
+        report = {"errors": [str(e)]}
+    if "errors" in report:
+        errors = errors + report.pop("errors")
+        if len(errors) > 0:
+            with threadLock:
+                errorsCount+=len(errors)
+            records[record.get(dataReader.ID)]["errors"] = errors
+    updateRemainingCalls(int(kbb.rateLimit))
+
+def updateRemainingCalls(remaining):
+    global remainingCalls
+    with threadLock:
+        if remaining < remainingCalls:
+            remainingCalls = remaining
 
 def shutdown_handler(signal_int: int, frame: FrameType) -> None:
     logger.info(f"Caught Signal {signal.strsignal(signal_int)}")
