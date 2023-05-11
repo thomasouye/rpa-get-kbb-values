@@ -4,7 +4,7 @@ from time import sleep
 
 class Kbb:
     #KBB Settings
-    KBB_API_ENDPOINT = "https://sandbox.api.kbb.com/idws/"
+    KBB_API_ENDPOINT = "https://api.kbb.com/idws/"
     KBB_VIN_ENDPOINT = "vehicle/vin/id/"
     KBB_VEHICLE_VALUE_ENDPOINT = "vehicle/values"
     KBB_VEHICLE_MAKE_ENDPOINT = "vehicle/makes"
@@ -148,6 +148,7 @@ class Kbb:
             ret = requests.post(self.KBB_API_ENDPOINT + self.url, params = self.params, json = self.data)
         else: #DEFAULT IS GET
             ret = requests.get(self.KBB_API_ENDPOINT + self.url, params=self.params)
+        print(ret.headers)
         if "X-RateLimit-Remaining-Day" in ret.headers: 
             self.rateLimit = float(ret.headers["X-RateLimit-Remaining-Day"]) #Update the remaining daily count
         if ret.status_code == 429: #Retry if hit the per second rate limit
