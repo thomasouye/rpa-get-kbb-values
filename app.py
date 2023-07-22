@@ -154,8 +154,8 @@ def job(record):
     kbb = Kbb(os.environ["kbb_api_key"], reporting)
     errors = []
     report = {}
-    if float(errorsCount) > float(count) * 0.2: #If there is more than 20% error stop trying
-        return
+    # if float(errorsCount) > float(count) * 0.2: #If there is more than 20% error stop trying
+    #     return
     with threadLock:
         count+=1
     try:
