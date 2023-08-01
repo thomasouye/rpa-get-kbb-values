@@ -148,7 +148,6 @@ class Kbb:
             ret = requests.post(self.KBB_API_ENDPOINT + self.url, params = self.params, json = self.data)
         else: #DEFAULT IS GET
             ret = requests.get(self.KBB_API_ENDPOINT + self.url, params=self.params)
-        print(ret.headers)
         if "X-RateLimit-Remaining-Day" in ret.headers: 
             self.rateLimit = float(ret.headers["X-RateLimit-Remaining-Day"]) #Update the remaining daily count
         if ret.status_code == 429: #Retry if hit the per second rate limit
@@ -426,6 +425,16 @@ class Kbb:
     def compareVehicleVinAndName(self, vin, year, makeName, modelName, trimName):
         return self.getVehicleIdByName(year, makeName, modelName, trimName) == self.getVehicleIdByVinAndTrim(vin, trimName)
 
+    def addOptionNames(self):
+        optionById = {}
+        for option in self.vehicle.get("vehicleOptions"):
+            optionById[str(option["vehicleOptionId"])] = option["optionName"]
+
+        for i, price in enumerate(self.values["prices"]):
+            for j, option in enumerate(price["optionPrices"]):
+                self.values["prices"][i]["optionPrices"][j]["optionName"] = optionById.get(option["vehicleOptionId"])
+
+
     def generateKBBReport(self, vin, trimName, trimNameConverted, errors):
         id = self.id
         vehicleId = self.vehicle.get("vehicleId")
@@ -433,6 +442,7 @@ class Kbb:
         prices = {}
         if "prices" in self.values:
             configuredValue = self.values["prices"][0]["configuredValue"]
+            self.addOptionNames()
             prices = self.values["prices"]
         matchedVehicle = self.vehicle.get("trimName")
         trimNames = self.getTrimNames()
@@ -440,7 +450,7 @@ class Kbb:
         originalOptionNames = self.originalOptionNames
         availableVehicleOptions = ""
         if "vehicleOptions" in self.vehicle:
-            availableVehicleOptions = str( [x.get("optionName") for x in self.vehicle.get("vehicleOptions")])
+            availableVehicleOptions = str( [ x.get("optionName") + ' (' + str(x.get("vehicleOptionId")) + ')' for x in self.vehicle.get("vehicleOptions")])
 
         usedLowestPricedTrim = self.usedLowestPricedTrim
         callsMade = self.callsMade
