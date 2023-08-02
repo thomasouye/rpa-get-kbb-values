@@ -162,6 +162,7 @@ def job(record):
         if dataReader.ERRORS in record:
             raise Exception(str(record[dataReader.ERRORS]))
         report = kbb.getVehicleValue(record.get(dataReader.ID), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS, set()))
+        records[record.get(dataReader.ID)]["report"] = {}
         if "prices" in report and report["prices"]:
             with threadLock:
                 matchedCount+=1
