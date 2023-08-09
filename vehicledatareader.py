@@ -9,7 +9,7 @@ class Vehicle(BaseModel):
     year: int 
     make: str 
     model: str
-    trim: str = ''
+    trim: str = None
     mileage: int = None
     zip: str = None
     options: List[str] = list()
@@ -70,7 +70,7 @@ class VehicleDataReader:
     CSV_MAKE_COLUMN = "MakeName"
     CSV_MODEL_COLUMN = "ModelName"
     CSV_TRIM_COLUMN = "BodyStyle"
-    CSV_OPTION_COLUMN = "OptionDescription"
+    CSV_OPTION_COLUMN = "OptionsDescription"
     CSV_MILEAGE_COLUMN = "Mileage"
 
 

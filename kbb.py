@@ -11,6 +11,7 @@ class Kbb:
     KBB_OPTION_ENDPOINT = "vehicle/vehicleoptions"
     KBB_VEHICLE_MODEL_ENDPOINT = "vehicle/models"
     KBB_VEHICLE_VEHICLES_ENDPOINT = "vehicle/vehicles"
+    KBB_VEHICLE_CONFIG_ENDPOINT = "vehicle/applyconfiguration"
     KBB_VEHICLE_LIMIT = 500 #500 is the max limit to send to KBB
     KBB_SUCCESS_LOG_MESSAGE = "KBB API call made!"
     KBB_TIME_WAIT = 0 #Seconds to wait between calls
@@ -60,7 +61,8 @@ class Kbb:
         "Moonroof": "Moon Roof",
         "Wheel": "Wheels",
         "Blind Spot": "Blind-Spot",
-        "Navi": "Navigation"
+        "Navi": "Navigation",
+        "Off Road": "Off-Road"
     }
 
     #Ignore the option if it has any of the words in OPTION_IGNORE
@@ -100,18 +102,23 @@ class Kbb:
         self.resetRequest()
         self.id = 0
         self.vehicle = {}
+        self.valuationDate = ""
         self.lastRequestTime = datetime.now() - timedelta(seconds=1)
         self.trims = {}
         self.values = {}
         self.servcoTrimName = ""
-        self.optionCodes = set()
-        self.optionCodeNames = set()
-        self.originalOptionNames = set()
+        self.originalOptionNames = []
+        self.typicalOptions = []
+        self.vinDecodedOptions = []
+        self.matchedOptions = []
+        self.configuration = []
+        self.configurationWithNames = []
         self.usedLowestPricedTrim = False
         self.callsMade = 0
         self.rateLimit = float("inf")
         self.report = report
         self.debug = False
+        self.warnings = []
     
     def print(self, string):
         if self.debug:
@@ -127,40 +134,55 @@ class Kbb:
     def doneProcessingVehicle(self):
         self.resetRequest()
         self.id = 0
+        self.valuationDate = ""
         self.vehicle = {}
         self.trims = {}
         self.values = {}
         self.servcoTrimName = ""
-        self.optionCodes = set()
-        self.optionCodeNames = set()
-        self.originalOptionNames = set()
+        self.originalOptionNames = []
+        self.typicalOptions = []
+        self.vinDecodedOptions = []
+        self.matchedOptions = []
+        self.configuration = []
+        self.configurationWithNames = []
         self.usedLowestPricedTrim = False
         self.callsMade = 0
+        self.warnings = []
 
     def setParams(self, params):
         self.params.update(params)
 
     def submitRequest(self, retries=99): #20 max retries before failing a request ~20 seconds per request
+        #print('----BEGIN KBB CALL--------')
         if retries > self.KBB_MAX_RETRIES:
             retries = self.KBB_MAX_RETRIES
         while (datetime.now() - self.lastRequestTime).total_seconds() < self.KBB_TIME_WAIT:
             sleep(self.KBB_TIME_WAIT/5)
         if self.requestType == "POST":
+            #print("------REQUEST DATA:" + str(self.data))
+            #print("------REQUEST PARAMS: " + str(self.params))
             ret = requests.post(self.KBB_API_ENDPOINT + self.url, params = self.params, json = self.data)
         else: #DEFAULT IS GET
+            #print("------VIN LOOKUP: " + self.url)
+            #print("------REQUEST PARAMS: " + str(self.params))
             ret = requests.get(self.KBB_API_ENDPOINT + self.url, params=self.params)
         if "X-RateLimit-Remaining-Day" in ret.headers: 
             self.rateLimit = float(ret.headers["X-RateLimit-Remaining-Day"]) #Update the remaining daily count
         if ret.status_code == 429: #Retry if hit the per second rate limit
             if "X-RateLimit-Remaining-Day" in ret.headers and float(ret.headers["X-RateLimit-Remaining-Day"]) > 0:
                 sleep(self.KBB_RETRY_WAIT)
-                print("Retry #: " + str(self.KBB_MAX_RETRIES + 1 - retries) + " out of " + str(self.KBB_MAX_RETRIES))
+                #print("Retry #: " + str(self.KBB_MAX_RETRIES + 1 - retries) + " out of " + str(self.KBB_MAX_RETRIES))
                 return self.submitRequest(retries-1)
+        jsonResponse = ret.json()
+        #print("------KBB RESPONSE: " + str(jsonResponse))
+        #print("----END KBB CALL-------")
+        if "warnings" in jsonResponse:
+            self.warnings = self.warnings + ret.json()["warnings"]
         self.resetRequest()
         if ret.status_code == 200:
             self.callsMade += 1
-            print(self.KBB_SUCCESS_LOG_MESSAGE)
-            return ret.json()
+            #print(self.KBB_SUCCESS_LOG_MESSAGE)
+            return jsonResponse
         raise Exception('The KBB API responded with a ' + str(ret.status_code) + ' status code: ' + ret.content.decode("utf-8"))
 
     def getTrimsByVin(self, vin):
@@ -180,7 +202,7 @@ class Kbb:
         convertedTrimName = ''
         for trimWord in trimName.split():
             for acro, word in self.TRIM_CONVERSION.items():
-                if acro == trimWord:
+                if acro.upper() == trimWord.upper():
                     trimWord = word
                     break
             convertedTrimName += trimWord + ' '
@@ -191,10 +213,17 @@ class Kbb:
         # return trimName
 
     def convertServcoOptionName(self, optionName):
-        convertedOptionName = optionName
-        for word, replacement in self.OPTION_CONVERSION.items():
-            convertedOptionName = convertedOptionName.upper().replace(word.upper(), replacement.upper())
-        return convertedOptionName.strip()
+        convertedOptionName = []
+        match = False
+        for word in optionName.split():
+            for replace, replacement in self.OPTION_CONVERSION.items():
+                if replace.upper() == word.upper():
+                    convertedOptionName.append(replacement.upper())
+                    match = True
+                    break
+            if not match:
+                convertedOptionName.append(word)
+        return " ".join(convertedOptionName)
 
     def filterServcoOptions(self, options):
         for blacklist in self.OPTION_IGNORE:
@@ -257,11 +286,11 @@ class Kbb:
         return self.getVehicleByVinAndTrim(vin, trimName)
 
     def getValueByVehicleId(self, vehicleId, mileage, zipCode, vehicleOptionIds):
-        self.data = {"configuration": {"vehicleId": vehicleId, "vehicleOptionIds": list(vehicleOptionIds)}, "mileage": mileage, "zipCode": zipCode}
+        self.data = {"configuration": {"vehicleId": vehicleId, "vehicleOptionIds": list(vehicleOptionIds)}, "mileage": mileage, "zipCode": zipCode, "valuationDate": self.valuationDate}
         self.url = self.KBB_VEHICLE_VALUE_ENDPOINT
         self.requestType = "POST"
         self.values = self.submitRequest()
-        print(self.values)
+        #print(self.values)
         return self.values
 
     def getOptionsByVehicleId(self, vehicleId):
@@ -269,8 +298,46 @@ class Kbb:
         self.params["vehicleId"] = vehicleId
         self.url = self.KBB_OPTION_ENDPOINT
         self.requestType = "GET"
-        self.values = self.submitRequest()
+        options = self.submitRequest()
+        self.vehicle["vehicleOptions"] = options.get("items")
         return self.values
+
+    def getTypicalOptions(self):
+        for option in self.vehicle["vehicleOptions"]:
+            if option["isTypical"]:
+                self.typicalOptions.append(option)
+                self.configuration.append(option["vehicleOptionId"])
+            if "isVinDecoded" in option and option["isVinDecoded"]:
+                self.vinDecodedOptions.append(option)
+
+    def updateConfiguration(self, newConfigurationIds):
+        self.data = {}
+        self.data["StartingConfiguration"] = {"VehicleId": self.vehicle["vehicleId"]}
+        if self.configuration:
+            self.data["StartingConfiguration"]["vehicleOptionIds"] = self.configuration
+
+        self.data["ConfigurationChanges"] = []
+        sequence = 1
+        for configuration in newConfigurationIds:
+            self.data["ConfigurationChanges"].append({"Sequence": sequence, "VehicleOptionId": configuration, "Action": "selected"})
+
+        self.url = self.KBB_VEHICLE_CONFIG_ENDPOINT
+        self.requestType = "POST"
+        response = self.submitRequest()
+
+        if "finalConfiguration" in response and "vehicleOptionIds" in response["finalConfiguration"]:
+            self.configuration = response["finalConfiguration"]["vehicleOptionIds"]
+
+    def getConfiguration(self):
+        self.getTypicalOptions()
+
+        vehicleConfiguration = []
+        for option in self.matchedOptions:
+            vehicleConfiguration.append(option["vehicleOptionId"])
+        for option in self.vinDecodedOptions:
+            vehicleConfiguration.append(option["vehicleOptionId"])
+
+        self.updateConfiguration(vehicleConfiguration)
 
     def getOptionNamesFromTrimName(self, options):
         if self.servcoTrimName:
@@ -297,15 +364,15 @@ class Kbb:
                 options[index] = options[index].replace(substr, "")
         return options
 
-    def getVehicleOptionCodes(self, options):
-        KBBVehicleOptions = self.cleanKBBOptionNames(self.vehicle["vehicleOptions"])
+    def getMatchingVehicleOptionCodes(self, options):
+        cleanedOptions = self.cleanKBBOptionNames(self.vehicle["vehicleOptions"])
+        KBBVehicleOptions = cleanedOptions
         
         options = self.getOptionNamesFromTrimName(options)
         if options:
             self.originalOptionNames = options
             options = self.convertOptionNames(options)
-        optionCodes = set()
-        optionCodeNames = set()
+        matchedOptions = []
         #print(str(len(options)))
         for option in options:
             matchCount = 0
@@ -316,36 +383,33 @@ class Kbb:
                 KBBVehicleOptions = list(filter(lambda x: (optionWord.upper() in x["optionName"].replace(",", "").upper().split()), KBBVehicleOptions))
                 #print('--' + optionWord)
                 #print('--' + str( [x["optionName"] for x in KBBVehicleOptions ]))
-                #print('----' + str(matchCount))
+                
                 if len(KBBVehicleOptions) == 1:  #Only one option remains
                     matchCount += 1
+                    #print('----' + str(matchCount))
                     if (optionWord.upper() in (x.upper() for x in self.BYPASS_OPTIONS)
                     or optionWord.upper() in (x.upper() for x in self.OPTIONS_IN_TRIM) 
                     or matchCount/len(KBBVehicleOptions[0]["optionName"].split()) > self.OPTION_MATCH_PERCENTAGE):
-                        #print('*------' + KBBVehicleOptions[0]["optionName"])
-                        optionCodes.add(KBBVehicleOptions[0]["vehicleOptionId"])
-                        optionCodeNames.add(str(KBBVehicleOptions[0]["vehicleOptionId"]) + " - " + KBBVehicleOptions[0]["optionName"])
+                        #print('*------' + str(KBBVehicleOptions[0]))
+                        matchedOptions.append(KBBVehicleOptions[0])
                         break
                 elif len(KBBVehicleOptions) > 0: #At least one option matched the current word
                     matchCount+=1
                 elif len(KBBVehicleOptions) == 0:  #None of the options matched the current word so reset
                     KBBVehicleOptions = savedOptions
-            KBBVehicleOptions = self.vehicle["vehicleOptions"]
-        self.optionCodes = optionCodes
-        self.optionCodeNames = optionCodeNames
-        return optionCodes
+            KBBVehicleOptions = cleanedOptions
+        #print(str(matchedOptions))
+        self.matchedOptions = matchedOptions
+        return matchedOptions
 
     def getValueByVinAndTrim(self, vin, trimName, mileage, zipCode, options):
-        vehicle = self.getVehicleIdByVinAndTrim(vin, trimName)
-        if not vehicle:
-            vehicle = self.getVehicleByLowestPricedTrim(mileage, zipCode)
-        
-        vehicleId = vehicle["vehicleId"]
-
-        vehicleOptionIds = self.getVehicleOptionCodes(options)
-        # for index in vehicle["vinResults"][0]["vehicleOptions"]:
-        #     vehicleOptionIds.push(vehicle["vinResults"][0]["vehicleOptions"][index]["vehicleOptionId"])
-        value = self.getValueByVehicleId(vehicleId, mileage, zipCode, vehicleOptionIds)
+        self.vehicle = self.getVehicleIdByVinAndTrim(vin, trimName)
+        if not self.vehicle:
+            self.vehicle = self.getVehicleByLowestPricedTrim(mileage, zipCode)
+        vehicleId = self.vehicle["vehicleId"]
+        self.getMatchingVehicleOptionCodes(options)
+        self.getConfiguration()
+        value = self.getValueByVehicleId(vehicleId, mileage, zipCode, self.configuration)
         return value
 
     def getMakeIdByName(self, makeName):
@@ -410,10 +474,10 @@ class Kbb:
         else:
             return None
 
-    def getVehicleIdByNameNotrim(self, year, makeName, modelName, mileage, zipCode):
+    def getVehicleIdByNameNoTrim(self, year, makeName, modelName, mileage, zipCode):
         self.trims = self.getTrimsByModelId(year, makeName, modelName)["items"]
-        vehicle = self.getVehicleByLowestPricedTrim(mileage, zipCode)
-        vehicleId = vehicle["vehicleId"]
+        self.vehicle = self.getVehicleByLowestPricedTrim(mileage, zipCode)
+        vehicleId = self.vehicle["vehicleId"]
         return vehicleId
 
     def getValueByName(self, year, makeName, modelName, trimName, mileage, zipCode, options = []):
@@ -421,10 +485,11 @@ class Kbb:
         if trimName and modelName.strip() != trimName.strip():
             vehicleId = self.getVehicleIdByName(year, makeName, modelName, trimName)
         if not vehicleId:
-            vehicleId = self.getVehicleIdByNameNotrim(year, makeName, modelName, mileage, zipCode)
-        self.vehicle["vehicleOptions"] = self.getOptionsByVehicleId(vehicleId)["items"]
-        vehicleOptionIds = self.getVehicleOptionCodes(options)
-        return self.getValueByVehicleId(vehicleId, mileage, zipCode, vehicleOptionIds)
+            vehicleId = self.getVehicleIdByNameNoTrim(year, makeName, modelName, mileage, zipCode)
+        self.getOptionsByVehicleId(vehicleId)
+        self.getMatchingVehicleOptionCodes(options)
+        self.getConfiguration()
+        return self.getValueByVehicleId(vehicleId, mileage, zipCode, self.configuration)
 
     def compareVehicleVinAndName(self, vin, year, makeName, modelName, trimName):
         return self.getVehicleIdByName(year, makeName, modelName, trimName) == self.getVehicleIdByVinAndTrim(vin, trimName)
@@ -438,10 +503,14 @@ class Kbb:
                 if "optionPrices" in price:
                     for j, option in enumerate(price.get("optionPrices")):
                         self.values["prices"][i]["optionPrices"][j]["optionName"] = optionById.get(option["vehicleOptionId"])
+        if self.report:
+            for optionId in self.configuration:
+                self.configurationWithNames.append({"vehicleOptionId": optionId, "optionName": optionById.get(str(optionId))})
 
 
-    def generateKBBReport(self, vin, trimName, trimNameConverted, errors):
-        id = self.id
+
+    def generateKBBReport(self, trimName, trimNameConverted, errors):
+        warnings = self.warnings
         vehicleId = self.vehicle.get("vehicleId")
         configuredValue = None
         prices = {}
@@ -452,8 +521,11 @@ class Kbb:
         valuationDate = self.values.get("valuationDate")
         matchedVehicle = self.vehicle.get("modelName") + ' ' + self.vehicle.get("trimName")
         trimNames = self.getTrimNames()
-        optionCodeNames = self.optionCodeNames
         originalOptionNames = self.originalOptionNames
+        matchedOptions = self.matchedOptions
+        vinDecodedOptions = self.vinDecodedOptions
+        typicalOptions = self.typicalOptions
+        configuration = self.configurationWithNames
         availableVehicleOptions = ""
         if "vehicleOptions" in self.vehicle:
             availableVehicleOptions = str( [ x.get("optionName") + ' (' + str(x.get("vehicleOptionId")) + ')' for x in self.vehicle.get("vehicleOptions")])
@@ -462,48 +534,52 @@ class Kbb:
         callsMade = self.callsMade
         self.doneProcessingVehicle()
         return {"errors": errors,
-                #"id": id,
+                "warnings": [str(x) for x in warnings],
                 "numCallsMade": callsMade, 
-                #"vin": vin, 
                 "valuationDate": valuationDate,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
-                "matchedVehicle": matchedVehicle, 
-                "matchedOptions": list(optionCodeNames), 
-                "configuredValue": configuredValue, 
                 "originalTrim": trimName, 
                 "convertedTrim": trimNameConverted, 
                 "availableTrims": trimNames, 
-                "kbbVehicleId": vehicleId, 
+                "matchedVehicle": matchedVehicle, 
+                "matchedOptions": [str(x.get("optionName")) + " (" + str(x.get("vehicleOptionId")) + ")" for x in matchedOptions], 
+                "vinDecodedOptions": [str(x.get("optionName")) + " (" + str(x.get("vehicleOptionId")) + ")" for x in vinDecodedOptions], 
+                "typicalOptions": [str(x.get("optionName")) + " (" + str(x.get("vehicleOptionId")) + ")" for x in typicalOptions],
+                "finalConfiguration": [str(x.get("optionName")) + " (" + str(x.get("vehicleOptionId")) + ")" for x in configuration],
                 "originalOptions": list(originalOptionNames), 
                 "availableOptions": availableVehicleOptions,
+                "configuredValue": configuredValue, 
+                "kbbVehicleId": vehicleId, 
                 "prices": prices
                 }
 
-    def generateReturnValues(self, vin, errors):
+    def generateReturnValues(self, errors):
         callsMade = self.callsMade
+
+        self.addOptionNames()
         prices = self.values.get("prices")
         usedLowestPricedTrim = self.usedLowestPricedTrim
-        id = self.id
         valuationDate = self.values.get("valuationDate")
+        warnings = self.warnings
         self.doneProcessingVehicle()
         return {"errors": errors,
-                #"id": id,
+                "warnings": [str(x) for x in warnings],
                 "valuationDate": valuationDate,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "numCallsMade": callsMade, 
-                #"vin": vin,
                 "prices": prices}
 
-    def getVehicleValue(self, id, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions):
+    def getVehicleValue(self, id, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions, valuationDate=datetime.today().strftime('%m/%d/%Y')):
         errors = []
         values = {}
+
+        self.valuationDate = valuationDate
         
         trimNameConverted = trimName
         if trimName:
             trimNameConverted = self.convertServcoTrimName(trimName)
         self.servcoTrimName = trimNameConverted
         self.id = id
-
         try:
             if vin:
                 values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
@@ -511,58 +587,10 @@ class Kbb:
                 values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
             self.values = values
         except Exception as e:
-            self.values = {}
             errors.append(str(e))
-            raise
         if not self.originalOptionNames and vehicleOptions:
             self.originalOptionNames = vehicleOptions
         if self.report:
-            return self.generateKBBReport(vin, trimName, trimNameConverted, errors)
+            return self.generateKBBReport(trimName, trimNameConverted, errors)
         else:
-            return self.generateReturnValues(vin, errors)
-
-
-
-    def getVehicleValueReportByVINAndTrim(self, vin, trimName, mileage, zipCode, vehicleOptions):
-        errors = []
-        configuredValue = 0
-        matchedVehicle = ""
-        valuationDate = ""
-        vehicleId = 0
-        trimNameConverted = trimName
-        trimNameConverted = self.convertServcoTrimName(trimName)
-        self.servcoTrimName = trimNameConverted
-        values = {}
-        try:
-            values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
-            vehicleId = self.vehicle["vehicleId"]
-            configuredValue = values["prices"][0]["configuredValue"]
-            valuationDate = values.get("valuationDate")
-            matchedVehicle = self.vehicle["trimName"]
-        except Exception as e:
-            errors.append(str(e))
-        trimNames = self.getTrimNames()
-        optionCodeNames = self.optionCodeNames
-        originalOptionNames = self.originalOptionNames
-        availableVehicleOptions = []
-        if "vehicleOptions" in self.vehicle:
-            availableVehicleOptions = self.vehicle["vehicleOptions"]
-        usedLowestPricedTrim = self.usedLowestPricedTrim
-        callsMade = self.callsMade
-        self.doneProcessingVehicle()
-        return {"errors": errors,
-                "numCallsMade": callsMade, 
-                "vin": vin, 
-                "usedLowestPricedTrim": usedLowestPricedTrim,
-                "matchedVehicle": matchedVehicle, 
-                "matchedOptions": list(optionCodeNames), 
-                "configuredValue": configuredValue, 
-                "originalTrim": trimName, 
-                "convertedTrim": trimNameConverted, 
-                "availableTrims": trimNames, 
-                "vehicleId": vehicleId, 
-                "originalOptions": list(originalOptionNames), 
-                "availableOptions": str( [x["optionName"] for x in availableVehicleOptions ]),
-                "prices": values["prices"],
-                "valuationDate": valuationDate
-                }
+            return self.generateReturnValues(errors)
