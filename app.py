@@ -18,6 +18,7 @@ from types import FrameType
 import os
 import threading
 from queue import Queue
+from datetime import datetime
 
 from kbb import Kbb
 from vehicledatareader import VehicleDataReader
@@ -62,6 +63,7 @@ def run() -> str:
     global validation
     global remainingCalls
     global threads
+    global date
 
     global count
     global errorsCount
@@ -89,6 +91,8 @@ def run() -> str:
     prices = request.args.get('prices', default = "Y", type = str)
     #Set how many threads to run
     threads = request.args.get('threads', default = 5, type = int)
+    #Get valuation date
+    date = request.args.get('date', default=datetime.today().strftime('%m/%d/%Y'), type = str)
     #validation is used to denote what validation mode to use.
     #mode 1: VIN or YMM
     #mode 2: VIN, YMM, mileage
@@ -115,7 +119,7 @@ def run() -> str:
     for record in records.values():
         work.put(record)
     
-    for i in range(threads-1):
+    for i in range(threads):
         thread = threading.Thread(target=worker)
         thread.daemon = True
         thread.start()
@@ -144,6 +148,7 @@ def job(record):
     global threadLock
     global reporting
     global validation
+    global date
     
     global count
     global errorsCount
@@ -159,9 +164,11 @@ def job(record):
     with threadLock:
         count+=1
     try:
+        #print("--BEGIN VEHICLE------")
+        #print(record)
         if dataReader.ERRORS in record:
             raise Exception(str(record[dataReader.ERRORS]))
-        report = kbb.getVehicleValue(record.get(dataReader.ID), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS, set()))
+        report = kbb.getVehicleValue(record.get(dataReader.ID), record.get(dataReader.VIN), record.get(dataReader.YEAR), record.get(dataReader.MAKE), record.get(dataReader.MODEL), record.get(dataReader.TRIM),  record.get(dataReader.MILEAGE), "96819", record.get(dataReader.OPTIONS, set()), date)
         records[record.get(dataReader.ID)]["report"] = {}
         if "prices" in report and report["prices"]:
             with threadLock:
@@ -176,6 +183,7 @@ def job(record):
             with threadLock:
                 totalCalls+=report["numCallsMade"]
         records[record.get(dataReader.ID)]["report"] = report
+        #print("--END VEHICLE------")
     except Exception as e:
         report = {"errors": [str(e)]}
     if "errors" in report:
@@ -184,7 +192,7 @@ def job(record):
             with threadLock:
                 errorsCount+=len(errors)
             records[record.get(dataReader.ID)]["errors"] = errors
-    updateRemainingCalls(int(kbb.rateLimit))
+    updateRemainingCalls(kbb.rateLimit)
 
 def updateRemainingCalls(remaining):
     global remainingCalls
