@@ -102,7 +102,7 @@ class Kbb:
         self.resetRequest()
         self.id = 0
         self.vehicle = {}
-        self.valuationDate = ""
+        #self.valuationDate = ""
         self.lastRequestTime = datetime.now() - timedelta(seconds=1)
         self.trims = {}
         self.values = {}
@@ -134,7 +134,7 @@ class Kbb:
     def doneProcessingVehicle(self):
         self.resetRequest()
         self.id = 0
-        self.valuationDate = ""
+        #self.valuationDate = ""
         self.vehicle = {}
         self.trims = {}
         self.values = {}
@@ -286,7 +286,7 @@ class Kbb:
         return self.getVehicleByVinAndTrim(vin, trimName)
 
     def getValueByVehicleId(self, vehicleId, mileage, zipCode, vehicleOptionIds):
-        self.data = {"configuration": {"vehicleId": vehicleId, "vehicleOptionIds": list(vehicleOptionIds)}, "mileage": mileage, "zipCode": zipCode, "valuationDate": self.valuationDate}
+        self.data = {"configuration": {"vehicleId": vehicleId, "vehicleOptionIds": list(vehicleOptionIds)}, "mileage": mileage, "zipCode": zipCode}#, "valuationDate": self.valuationDate}
         self.url = self.KBB_VEHICLE_VALUE_ENDPOINT
         self.requestType = "POST"
         self.values = self.submitRequest()
@@ -518,7 +518,7 @@ class Kbb:
             configuredValue = self.values["prices"][0]["configuredValue"]
             self.addOptionNames()
             prices = self.values["prices"]
-        valuationDate = self.values.get("valuationDate")
+        #valuationDate = self.values.get("valuationDate")
         matchedVehicle = self.vehicle.get("modelName") + ' ' + self.vehicle.get("trimName")
         trimNames = self.getTrimNames()
         originalOptionNames = self.originalOptionNames
@@ -536,7 +536,7 @@ class Kbb:
         return {"errors": errors,
                 "warnings": [str(x) for x in warnings],
                 "numCallsMade": callsMade, 
-                "valuationDate": valuationDate,
+                #"valuationDate": valuationDate,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "originalTrim": trimName, 
                 "convertedTrim": trimNameConverted, 
@@ -559,21 +559,21 @@ class Kbb:
         self.addOptionNames()
         prices = self.values.get("prices")
         usedLowestPricedTrim = self.usedLowestPricedTrim
-        valuationDate = self.values.get("valuationDate")
+        #valuationDate = self.values.get("valuationDate")
         warnings = self.warnings
         self.doneProcessingVehicle()
         return {"errors": errors,
                 "warnings": [str(x) for x in warnings],
-                "valuationDate": valuationDate,
+                #"valuationDate": valuationDate,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "numCallsMade": callsMade, 
                 "prices": prices}
 
-    def getVehicleValue(self, id, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions, valuationDate=datetime.today().strftime('%m/%d/%Y')):
+    def getVehicleValue(self, id, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions): #valuationDate=datetime.today().strftime('%m/%d/%Y')):
         errors = []
         values = {}
 
-        self.valuationDate = valuationDate
+        #self.valuationDate = valuationDate
         
         trimNameConverted = trimName
         if trimName:
