@@ -18,7 +18,7 @@ from types import FrameType
 import os
 import threading
 from queue import Queue
-from datetime import datetime
+#from datetime import datetime
 
 from kbb import Kbb
 from vehicledatareader import VehicleDataReader
@@ -92,7 +92,7 @@ def run() -> str:
     #Set how many threads to run
     threads = request.args.get('threads', default = 5, type = int)
     #Get valuation date
-    date = request.args.get('date', default=datetime.today().strftime('%m/%d/%Y'), type = str)
+    #date = request.args.get('date', default=datetime.today().strftime('%m/%d/%Y'), type = str)
     #validation is used to denote what validation mode to use.
     #mode 1: VIN or YMM
     #mode 2: VIN, YMM, mileage
