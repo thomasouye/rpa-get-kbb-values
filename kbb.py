@@ -45,6 +45,9 @@ class Kbb:
         "5MT": "Manual 5-Spd"
     }
 
+    #Ignore the trim word if it is one of these (ALL CAPS)
+    TRIM_IGNORE = ["EDITION"]
+
     #Remove substrings in this list from options
     OPTION_REMOVE =[
         "w/",
@@ -199,14 +202,17 @@ class Kbb:
                 raise Exception(str(result))
 
     def convertServcoTrimName(self, trimName):
-        convertedTrimName = ''
+        convertedTrimName = []
         for trimWord in trimName.split():
+            if trimWord.upper() in self.TRIM_IGNORE:
+                break
             for acro, word in self.TRIM_CONVERSION.items():
                 if acro.upper() == trimWord.upper():
                     trimWord = word
                     break
-            convertedTrimName += trimWord + ' '
-        return convertedTrimName.strip()
+            convertedTrimName.append(trimWord)
+        print(' '.join(convertedTrimName))
+        return ' '.join(convertedTrimName)
         # for acro, word in self.TRIM_CONVERSION.items():
         #     for trimWord in trimName.split():
         #         convertedTrimName += trimWord.replace(acro, word)
