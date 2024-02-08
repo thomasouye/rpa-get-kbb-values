@@ -110,7 +110,6 @@ class Kbb:
         self.trims = {}
         self.values = {}
         self.servcoTrimName = ""
-        #self.servcoModelName = ""
         self.originalOptionNames = []
         self.typicalOptions = []
         self.vinDecodedOptions = []
@@ -143,7 +142,6 @@ class Kbb:
         self.trims = {}
         self.values = {}
         self.servcoTrimName = ""
-        #self.servcoModelName = ""
         self.originalOptionNames = []
         self.typicalOptions = []
         self.vinDecodedOptions = []
@@ -213,7 +211,7 @@ class Kbb:
                     trimWord = word
                     break
             convertedTrimName.append(trimWord)
-        #print(' '.join(convertedTrimName))
+        print(' '.join(convertedTrimName))
         return ' '.join(convertedTrimName)
         # for acro, word in self.TRIM_CONVERSION.items():
         #     for trimWord in trimName.split():
@@ -354,13 +352,6 @@ class Kbb:
                     options.append(trimWord)
         return options
 
-    def getOptionNamesFromModelName(self, options):
-        if self.servcoModelName:
-            for trimWord in self.servcoModelName.split():
-                if trimWord.upper() in (x.upper() for x in self.OPTIONS_IN_TRIM):
-                    options.append(trimWord)
-        return options
-
     def convertOptionNames(self, options):
         convertedOptions = self.filterServcoOptions(options)
         convertedOptions = self.cleanOptionNames(convertedOptions) ## clean the options here too
@@ -384,7 +375,6 @@ class Kbb:
         KBBVehicleOptions = cleanedOptions
         
         options = self.getOptionNamesFromTrimName(options)
-        #options = self.getOptionNamesFromModelName(options)
         if options:
             self.originalOptionNames = options
             options = self.convertOptionNames(options)
@@ -594,14 +584,7 @@ class Kbb:
         trimNameConverted = trimName
         if trimName:
             trimNameConverted = self.convertServcoTrimName(trimName)
-
         self.servcoTrimName = trimNameConverted
-
-        #modelNameConverted = modelName #this is only to grab options from model name
-        #if modelName:
-        #    modelNameConverted = self.convertServcoTrimName(modelName)
-        #self.servcoModelName = modelNameConverted
-        
         self.id = id
         try:
             if vin:
