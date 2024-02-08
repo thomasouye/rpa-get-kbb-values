@@ -212,7 +212,7 @@ class Kbb:
                     trimWord = word
                     break
             convertedTrimName.append(trimWord)
-        print(' '.join(convertedTrimName))
+        #print(' '.join(convertedTrimName))
         return ' '.join(convertedTrimName)
         # for acro, word in self.TRIM_CONVERSION.items():
         #     for trimWord in trimName.split():
