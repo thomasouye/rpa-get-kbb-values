@@ -110,7 +110,7 @@ class Kbb:
         self.trims = {}
         self.values = {}
         self.servcoTrimName = ""
-        self.servcoModelName = ""
+        #self.servcoModelName = ""
         self.originalOptionNames = []
         self.typicalOptions = []
         self.vinDecodedOptions = []
@@ -143,6 +143,7 @@ class Kbb:
         self.trims = {}
         self.values = {}
         self.servcoTrimName = ""
+        #self.servcoModelName = ""
         self.originalOptionNames = []
         self.typicalOptions = []
         self.vinDecodedOptions = []
@@ -383,7 +384,7 @@ class Kbb:
         KBBVehicleOptions = cleanedOptions
         
         options = self.getOptionNamesFromTrimName(options)
-        options = self.getOptionNamesFromModelName(options)
+        #options = self.getOptionNamesFromModelName(options)
         if options:
             self.originalOptionNames = options
             options = self.convertOptionNames(options)
@@ -596,10 +597,10 @@ class Kbb:
 
         self.servcoTrimName = trimNameConverted
 
-        modelNameConverted = modelName #this is only to grab options from model name
-        if modelName:
-            modelNameConverted = self.convertServcoTrimName(modelName)
-        self.servcoModelName = modelNameConverted
+        #modelNameConverted = modelName #this is only to grab options from model name
+        #if modelName:
+        #    modelNameConverted = self.convertServcoTrimName(modelName)
+        #self.servcoModelName = modelNameConverted
         
         self.id = id
         try:
