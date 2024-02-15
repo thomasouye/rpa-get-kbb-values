@@ -113,7 +113,6 @@ def run() -> str:
         csv = request.get_data().decode()
         records = dataReader.csvInput(str(csv))
 
-    return records
     vehicleCount = len(records.keys())
     #----Value Vehicles-------------------------------
 
