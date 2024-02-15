@@ -1,12 +1,12 @@
-Flask
-gunicorn
+Flask==2.3.3
+gunicorn==21.2.0
 
-requests
-structlog
+requests==2.28.1
+structlog==22.1.0
 
-google-auth
+google-auth==2.26.2
 
 pyyaml
 
-pydantic
-typing-extensions
+pydantic==1.10.7
+typing-extensions==4.5.0
