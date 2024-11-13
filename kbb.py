@@ -126,7 +126,7 @@ class Kbb:
     
     def print(self, string):
         if self.debug:
-            print(string)
+            print(str(string))
 
     def resetRequest(self):
         self.url = ""
@@ -420,7 +420,8 @@ class Kbb:
     def getValueByVinAndTrim(self, vin, trimName, mileage, zipCode, options):
         self.vehicle = self.getVehicleIdByVinAndTrim(vin, trimName)
         if not self.vehicle:
-            self.vehicle = self.getVehicleByLowestPricedTrim(mileage, zipCode)
+            return
+            #self.vehicle = self.getVehicleByLowestPricedTrim(mileage, zipCode)
         vehicleId = self.vehicle["vehicleId"]
         self.getMatchingVehicleOptionCodes(options)
         self.getConfiguration()
@@ -500,7 +501,8 @@ class Kbb:
         if trimName and modelName.strip() != trimName.strip():
             vehicleId = self.getVehicleIdByName(year, makeName, modelName, trimName)
         if not vehicleId:
-            vehicleId = self.getVehicleIdByNameNoTrim(year, makeName, modelName, mileage, zipCode)
+            return
+            #vehicleId = self.getVehicleIdByNameNoTrim(year, makeName, modelName, mileage, zipCode)
         self.getOptionsByVehicleId(vehicleId)
         self.getMatchingVehicleOptionCodes(options)
         self.getConfiguration()
@@ -526,7 +528,11 @@ class Kbb:
 
     def generateKBBReport(self, trimName, trimNameConverted, errors):
         warnings = self.warnings
-        vehicleId = self.vehicle.get("vehicleId")
+        vehicleId = None
+        if self.vehicle and "vehicleId" in self.vehicle:
+            vehicleId = self.vehicle.get("vehicleId")
+        else:
+            raise Exception('Unable to find a KBB vehicle match.')
         configuredValue = None
         prices = {}
         if "prices" in self.values:
@@ -547,10 +553,12 @@ class Kbb:
 
         usedLowestPricedTrim = self.usedLowestPricedTrim
         callsMade = self.callsMade
+        callsRemaining = self.rateLimit
         self.doneProcessingVehicle()
         return {"errors": errors,
                 "warnings": [str(x) for x in warnings],
                 "numCallsMade": callsMade, 
+                "numCallsRemaining": callsRemaining,
                 #"valuationDate": valuationDate,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "originalTrim": trimName, 
@@ -570,7 +578,7 @@ class Kbb:
 
     def generateReturnValues(self, errors):
         callsMade = self.callsMade
-
+        callsRemaining = self.rateLimit
         self.addOptionNames()
         prices = self.values.get("prices")
         usedLowestPricedTrim = self.usedLowestPricedTrim
@@ -582,6 +590,7 @@ class Kbb:
                 #"valuationDate": valuationDate,
                 "usedLowestPricedTrim": usedLowestPricedTrim,
                 "numCallsMade": callsMade, 
+                "numCallsRemaining": callsRemaining,
                 "prices": prices}
 
     def getVehicleValue(self, id, vin, year, makeName, modelName, trimName, mileage, zipCode, vehicleOptions): #valuationDate=datetime.today().strftime('%m/%d/%Y')):
@@ -602,14 +611,14 @@ class Kbb:
         self.servcoModelName = modelNameConverted
         
         self.id = id
-        try:
-            if vin:
-                values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
-            else:
-                values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
-            self.values = values
-        except Exception as e:
-            errors.append(str(e))
+        #try:
+        if vin:
+            values = self.getValueByVinAndTrim(vin, trimNameConverted, mileage, zipCode, vehicleOptions)
+        else:
+            values = self.getValueByName(year, makeName , modelName, trimNameConverted, mileage, zipCode, vehicleOptions)
+        self.values = values
+       # except Exception as e:
+            #errors.append(str(e))
         if not self.originalOptionNames and vehicleOptions:
             self.originalOptionNames = vehicleOptions
         if self.report:
